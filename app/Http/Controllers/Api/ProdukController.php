@@ -14,7 +14,7 @@ use App\Models\ProdukImage;
 
 class ProdukController extends Controller
 {
-    public function index(Request $request)
+   public function index(Request $request)
     {
         $query = Produk::query();
 
@@ -22,8 +22,8 @@ class ProdukController extends Controller
         if ($request->has('search')) {
             $search = $request->search;
 
-            $query->where('namaBarang', 'like', "%{$search}%")
-                ->orWhere('kodeBarang', 'like', "%{$search}%");
+            $query->where('nama_barang', 'like', "%{$search}%")
+                ->orWhere('kode_barang', 'like', "%{$search}%");
         }
 
         // FILTER KATEGORI
@@ -46,51 +46,55 @@ class ProdukController extends Controller
             $query->latest();
         }
 
-        // $produk = Produk::paginate(10);
-        $produk = $query->paginate(10);
+       // $produk = $query->paginate(10);
+       // $produk = Produk::paginate(10);
+       $produk = $query->get();
 
         return response()->json([
             'success' => true,
             'message' => 'List Produk',
-            'data' => ProdukResource::collection($produk),
-            'pagination' => [
-                'current_page' => $produk->currentPage(),
-                'last_page' => $produk->lastPage(),
-                'per_page' => $produk->perPage(),
-                'total' => $produk->total(),
+            'data' => ProdukResource::collection($produk)
+            // 'pagination' => [
+            // 'current_page' => $produk->currentPage(),
+            // 'last_page' => $produk->lastPage(),
+            // 'per_page' => $produk->perPage(),
+            // 'total' => $produk->total(),
 
-                'from' => $produk->firstItem(),
-                'to' => $produk->lastItem(),
+            // 'first_page_url' => $produk->url(1),
+            // 'last_page_url' => $produk->url($produk->lastPage()),
+            // 'next_page_url' => $produk->nextPageUrl(),
+            // 'prev_page_url' => $produk->previousPageUrl(),
 
-                'first_page_url' => $produk->url(1),
-                'last_page_url' => $produk->url($produk->lastPage()),
-                'next_page_url' => $produk->nextPageUrl(),
-                'prev_page_url' => $produk->previousPageUrl(),
-            ]
+            // 'from' => $produk->firstItem(),
+            // 'to' => $produk->lastItem(),
+
+            // ]
         ]);
     }
+
     public function store(StoreProdukRequest $request)
     {
-        $data = $request->validated();
+
+            $data = $request->validated();
 
         if ($request->hasFile('gambar')) {
 
             $file = $request->file('gambar');
 
-            $filename = time() . '_' . $file->getClientOriginalName();
+            $filename = time().'_'.$file->getClientOriginalName();
 
-            $destinationPath = storage_path('app/public/produk/' . $filename);
+            $destinationPath = storage_path('app/public/produk/'.$filename);
 
             // engine resize image
             $manager = new ImageManager(new Driver());
             $image = $manager->read($file->getRealPath());
 
-            // resize (lebar 800)
+            // resize gambar
             $image->scale(width: 800);
 
             $image->save($destinationPath);
 
-            $data['gambar'] = 'produk/' . $filename;
+            $data['gambar'] = 'produk/'.$filename;
         }
 
         $produk = Produk::create($data);
@@ -120,143 +124,50 @@ class ProdukController extends Controller
         if (empty($data)) {
             return response()->json([
                 'message' => 'Tidak ada data yang diupdate'
-            ]);
-        }
+        ]);
+    }
 
         // cek apakah ada gambar baru
         if ($request->hasFile('gambar')) {
 
-            // hapus gambar lama
-            if ($produk->gambar) {
-                Storage::disk('public')->delete($produk->gambar);
-            }
-
-            $file = $request->file('gambar');
-
-            $filename = time() . '_' . $file->getClientOriginalName();
-
-            $destinationPath = storage_path('app/public/produk/' . $filename);
-
-            // resize engine
-            $manager = new ImageManager(new Driver());
-            $image = $manager->read($file->getRealPath());
-
-            // pakai scale jika lebih besar dari 800
-            if ($image->width() > 800) {
-                $image->scale(width: 800);
-            }
-
-            // save + compress
-            $image->save($destinationPath, quality: 80);
-
-            // simpan ke DB
-            $data['gambar'] = 'produk/' . $filename;
+        // hapus gambar lama jika ada
+        if ($produk->gambar) {
+            Storage::disk('public')->delete($produk->gambar);
         }
 
-        $produk->update($data);
+         $file = $request->file('gambar');
+
+        $filename = time().'_'.$file->getClientOriginalName();
+
+        $destinationPath = storage_path('app/public/produk/'.$filename);
+
+        // resize engine
+        $manager = new ImageManager(new Driver());
+        $image = $manager->read($file->getRealPath());
+
+        // pakai scale
+        if ($image->width() > 800) {
+            $image->scale(width: 800);
+        }
+
+        // save + compress
+        $image->save($destinationPath, quality: 80);
+
+        // simpan ke DB
+        $data['gambar'] = 'produk/'.$filename;
+    }
+
+    $produk->update($data);
+
 
         return response()->json([
             'success' => true,
-            'message' => 'Produk Berhasil Diupdate',
+            'message' => 'Produk berhasil diupdate',
             'data' => new ProdukResource($produk)
         ]);
     }
 
-    public function uploadImages(Request $request, $id)
-    {
-        $produk = Produk::findOrFail($id);
-
-        $request->validate([
-            'gambar' => 'required|array',
-            'gambar.*' => 'image|mimes:jpg,jpeg,png|max:2048'
-        ]);
-
-        $manager = new ImageManager(new Driver());
-
-        $images = [];
-
-        foreach ($request->file('gambar') as $file) {
-
-            $filename = time() . '_' . uniqid() . '_' . $file->getClientOriginalName();
-
-            $destinationPath = storage_path('app/public/produk/' . $filename);
-
-            $image = $manager->read($file->getRealPath());
-
-            if ($image->width() > 800) {
-                $image->scale(width: 800);
-            }
-
-            $image->save($destinationPath, quality: 80);
-
-            $path = 'produk/' . $filename;
-
-            // simpan ke tabel relasi
-            $img = ProdukImage::create([
-                'produk_id' => $produk->id,
-                'path' => $path
-            ]);
-
-            $images[] = $img;
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Multiple images berhasil diupload',
-            'data' => $images
-        ]);
-    }
-    public function updateImages(Request $request, $id)
-    {
-        $produk = Produk::findOrFail($id);
-
-        $request->validate([
-            'gambar' => 'required|array',
-            'gambar.*' => 'image|mimes:jpg,jpeg,png|max:2048'
-        ]);
-
-        $manager = new ImageManager(new Driver());
-
-        // hapus semua gambar lama
-        foreach ($produk->images as $img) {
-            Storage::disk('public')->delete($img->path);
-            $img->delete();
-        }
-
-        $images = [];
-
-        foreach ($request->file('gambar') as $file) {
-
-            $filename = time() . '_' . uniqid() . '_' . $file->getClientOriginalName();
-
-            $destinationPath = storage_path('app/public/produk/' . $filename);
-
-            $image = $manager->read($file->getRealPath());
-
-            if ($image->width() > 800) {
-                $image->scale(width: 800);
-            }
-
-            $image->save($destinationPath, quality: 80);
-
-            $path = 'produk/' . $filename;
-
-            $img = ProdukImage::create([
-                'produk_id' => $produk->id,
-                'path' => $path
-            ]);
-
-            $images[] = $img;
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Multiple images berhasil diupdate',
-            'data' => $images
-        ]);
-    }
-
-public function destroy($id)
+    public function destroy($id)
     {
         $produk = Produk::findOrFail($id);
 
@@ -277,7 +188,105 @@ public function destroy($id)
 
         return response()->json([
             'success' => true,
-            'message' => 'Produk dan gambar berhasil dihapus'
+            'message' => 'Produk berhasil dihapus'
         ]);
     }
+
+    public function uploadImages(Request $request, $id)
+    {
+        $produk = Produk::findOrFail($id);
+
+        $request->validate([
+            'gambar' => 'required|array',
+            'gambar.*' => 'image|mimes:jpg,jpeg,png|max:2048'
+        ]);
+
+        $manager = new ImageManager(new Driver());
+
+        $images = [];
+
+        foreach ($request->file('gambar') as $file) {
+
+            $filename = time().'_'.uniqid().'_'.$file->getClientOriginalName();
+
+            $destinationPath = storage_path('app/public/produk/'.$filename);
+
+            $image = $manager->read($file->getRealPath());
+
+            if ($image->width() > 800) {
+                $image->scale(width: 800);
+            }
+
+            $image->save($destinationPath, quality: 80);
+
+            $path = 'produk/'.$filename;
+
+            // simpan ke tabel relasi
+            $img = ProdukImage::create([
+                'produk_id' => $produk->id,
+                'path' => $path
+            ]);
+
+            $images[] = $img;
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Multiple images berhasil diupload',
+            'data' => $images
+        ]);
+    }
+
+    public function updateImages(Request $request, $id)
+    {
+        $produk = Produk::findOrFail($id);
+
+        $request->validate([
+            'gambar' => 'required|array',
+            'gambar.*' => 'image|mimes:jpg,jpeg,png|max:2048'
+        ]);
+
+        // hapus gambar lama
+        $oldImages = ProdukImage::where('produk_id', $id)->get();
+
+        foreach ($oldImages as $img) {
+            Storage::disk('public')->delete($img->path);
+            $img->delete();
+        }
+
+        // upload ulang gambar baru
+        $manager = new ImageManager(new Driver());
+        $images = [];
+
+        foreach ($request->file('gambar') as $file) {
+
+            $filename = time().'_'.uniqid().'_'.$file->getClientOriginalName();
+            $destinationPath = storage_path('app/public/produk/'.$filename);
+
+            $image = $manager->read($file->getRealPath());
+
+            if ($image->width() > 800) {
+                $image->scale(width: 800);
+            }
+
+            $image->save($destinationPath, quality: 80);
+
+            $path = 'produk/'.$filename;
+
+            $img = ProdukImage::create([
+                'produk_id' => $id,
+                'path' => $path
+            ]);
+
+            $images[] = $img;
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Gambar berhasil diupdate',
+            'data' => $images
+        ]);
+    }
+
+
 }
